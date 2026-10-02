@@ -65,7 +65,7 @@ def get_forecast():
         "timezone": "Europe/Moscow",
         "start_date": tomorrow.isoformat(),
         "end_date": tomorrow.isoformat(),
-        "forecast_days": 2,
+        
     }
 
     url = "https://api.open-meteo.com/v1/forecast?" + urlencode(params)
