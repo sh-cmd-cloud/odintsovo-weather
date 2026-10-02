@@ -1,20 +1,18 @@
 import json
 import os
+import time
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
-
 MOSCOW = ZoneInfo("Europe/Moscow")
 
-# Координаты Одинцово
 LATITUDE = 55.678
 LONGITUDE = 37.277
 
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
-
 
 WEATHER_CODES = {
     0: "ясно",
@@ -65,25 +63,35 @@ def get_forecast():
         "timezone": "Europe/Moscow",
         "start_date": tomorrow.isoformat(),
         "end_date": tomorrow.isoformat(),
-        
     }
 
     url = "https://api.open-meteo.com/v1/forecast?" + urlencode(params)
 
-    request = Request(
-        url,
-        headers={"User-Agent": "odintsovo-weather/1.0"},
-    )
+    last_error = None
 
-    with urlopen(request, timeout=30) as response:
-        return json.loads(response.read().decode("utf-8"))
+    for attempt in range(3):
+        try:
+            request = Request(
+                url,
+                headers={"User-Agent": "odintsovo-weather/1.0"}
+            )
+
+            with urlopen(request, timeout=90) as response:
+                return json.loads(response.read().decode("utf-8"))
+
+        except Exception as error:
+            last_error = error
+
+            if attempt < 2:
+                time.sleep(5)
+
+    raise RuntimeError(
+        f"Не удалось получить прогноз после 3 попыток: {last_error}"
+    )
 
 
 def send_telegram(message):
-    url = (
-        f"https://api.telegram.org/bot"
-        f"{TELEGRAM_BOT_TOKEN}/sendMessage"
-    )
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
     payload = json.dumps({
         "chat_id": TELEGRAM_CHAT_ID,
@@ -100,7 +108,7 @@ def send_telegram(message):
         method="POST",
     )
 
-    with urlopen(request, timeout=30) as response:
+    with urlopen(request, timeout=60) as response:
         result = json.loads(response.read().decode("utf-8"))
 
     if not result.get("ok"):
@@ -109,7 +117,6 @@ def send_telegram(message):
 
 def main():
     data = get_forecast()
-
     hourly = data["hourly"]
 
     rows = []
@@ -131,9 +138,8 @@ def main():
     if not rows:
         raise RuntimeError("Не найден прогноз на 05:00–09:00")
 
-    date_text = (
-        datetime.now(MOSCOW).date() + timedelta(days=1)
-    ).strftime("%d.%m.%Y")
+    tomorrow = datetime.now(MOSCOW).date() + timedelta(days=1)
+    date_text = tomorrow.strftime("%d.%m.%Y")
 
     lines = [
         f"🌦️ Погода в Одинцово на завтра, {date_text}",
@@ -149,8 +155,8 @@ def main():
 
         lines.append(
             f"{row['hour']:02d}:00 — "
-            f"{row['temp']:+.0f}°C"
-            f" (ощущается {row['feels']:+.0f}°C), "
+            f"{row['temp']:+.0f}°C "
+            f"(ощущается {row['feels']:+.0f}°C), "
             f"{condition}; "
             f"осадки {row['rain_probability']}%, "
             f"{row['precipitation']:.1f} мм, "
