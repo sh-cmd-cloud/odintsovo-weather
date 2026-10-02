@@ -47,8 +47,6 @@ WEATHER_CODES = {
 
 
 def get_forecast():
-    tomorrow = datetime.now(MOSCOW).date() + timedelta(days=1)
-
     params = {
         "latitude": LATITUDE,
         "longitude": LONGITUDE,
@@ -61,8 +59,7 @@ def get_forecast():
             "wind_speed_10m"
         ),
         "timezone": "Europe/Moscow",
-        "start_date": tomorrow.isoformat(),
-        "end_date": tomorrow.isoformat(),
+        "forecast_days": 3,
     }
 
     url = "https://api.open-meteo.com/v1/forecast?" + urlencode(params)
@@ -73,11 +70,15 @@ def get_forecast():
         try:
             request = Request(
                 url,
-                headers={"User-Agent": "odintsovo-weather/1.0"}
+                headers={
+                    "User-Agent": "odintsovo-weather/1.0"
+                }
             )
 
-            with urlopen(request, timeout=90) as response:
-                return json.loads(response.read().decode("utf-8"))
+            with urlopen(request, timeout=60) as response:
+                return json.loads(
+                    response.read().decode("utf-8")
+                )
 
         except Exception as error:
             last_error = error
@@ -86,12 +87,15 @@ def get_forecast():
                 time.sleep(5)
 
     raise RuntimeError(
-        f"Не удалось получить прогноз после 3 попыток: {last_error}"
+        f"Open-Meteo не ответил после 3 попыток: {last_error}"
     )
 
 
 def send_telegram(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    url = (
+        f"https://api.telegram.org/"
+        f"bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    )
 
     payload = json.dumps({
         "chat_id": TELEGRAM_CHAT_ID,
@@ -109,36 +113,53 @@ def send_telegram(message):
     )
 
     with urlopen(request, timeout=60) as response:
-        result = json.loads(response.read().decode("utf-8"))
+        result = json.loads(
+            response.read().decode("utf-8")
+        )
 
     if not result.get("ok"):
-        raise RuntimeError(f"Telegram error: {result}")
+        raise RuntimeError(
+            f"Telegram error: {result}"
+        )
 
 
 def main():
     data = get_forecast()
     hourly = data["hourly"]
 
+    tomorrow = (
+        datetime.now(MOSCOW).date()
+        + timedelta(days=1)
+    )
+
     rows = []
 
     for i, timestamp in enumerate(hourly["time"]):
         dt = datetime.fromisoformat(timestamp)
 
-        if 5 <= dt.hour <= 9:
+        if (
+            dt.date() == tomorrow
+            and 5 <= dt.hour <= 9
+        ):
             rows.append({
                 "hour": dt.hour,
                 "temp": hourly["temperature_2m"][i],
                 "feels": hourly["apparent_temperature"][i],
                 "code": hourly["weather_code"][i],
-                "rain_probability": hourly["precipitation_probability"][i],
-                "precipitation": hourly["precipitation"][i],
+                "rain_probability": (
+                    hourly["precipitation_probability"][i]
+                ),
+                "precipitation": (
+                    hourly["precipitation"][i]
+                ),
                 "wind": hourly["wind_speed_10m"][i],
             })
 
     if not rows:
-        raise RuntimeError("Не найден прогноз на 05:00–09:00")
+        raise RuntimeError(
+            "Не найден прогноз на завтра 05:00–09:00"
+        )
 
-    tomorrow = datetime.now(MOSCOW).date() + timedelta(days=1)
     date_text = tomorrow.strftime("%d.%m.%Y")
 
     lines = [
@@ -163,19 +184,38 @@ def main():
             f"ветер {row['wind']:.0f} км/ч"
         )
 
-    avg_temp = sum(r["temp"] for r in rows) / len(rows)
-    max_rain = max(r["rain_probability"] for r in rows)
+    avg_temp = (
+        sum(row["temp"] for row in rows)
+        / len(rows)
+    )
+
+    max_rain = max(
+        row["rain_probability"]
+        for row in rows
+    )
 
     if max_rain >= 70:
-        comment = "☔ Похоже, утром зонтик будет не лишним."
+        comment = (
+            "☔ Похоже, утром зонтик будет не лишним."
+        )
     elif max_rain >= 40:
-        comment = "🌂 Зонтик лучше держать в режиме боевой готовности."
+        comment = (
+            "🌂 Зонтик лучше держать "
+            "в режиме боевой готовности."
+        )
     elif avg_temp < 0:
-        comment = "🥶 Утро намекает: разминка перед выходом обязательна."
+        comment = (
+            "🥶 Утро намекает: разминка "
+            "перед выходом обязательна."
+        )
     elif avg_temp >= 15:
-        comment = "😎 Утро выглядит вполне дружелюбно."
+        comment = (
+            "😎 Утро выглядит вполне дружелюбно."
+        )
     else:
-        comment = "🏃 В целом утро выглядит вполне беговым."
+        comment = (
+            "🏃 В целом утро выглядит вполне беговым."
+        )
 
     lines.extend([
         "",
