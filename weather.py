@@ -23,48 +23,48 @@ TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
 
 # ============================================================
-# КОДЫ ПОГОДЫ OPEN-METEO
+# ПОГОДА
 # ============================================================
 
 WEATHER_CODES = {
-    0: "ясно",
-    1: "преимущественно ясно",
-    2: "переменная облачность",
-    3: "пасмурно",
+    0: ("☀️", "ясно"),
+    1: ("🌤", "преимущественно ясно"),
+    2: ("⛅", "переменная облачность"),
+    3: ("☁️", "пасмурно"),
 
-    45: "туман",
-    48: "туман с изморозью",
+    45: ("🌫", "туман"),
+    48: ("🌫", "туман с изморозью"),
 
-    51: "слабая морось",
-    53: "морось",
-    55: "сильная морось",
+    51: ("🌦", "слабая морось"),
+    53: ("🌦", "морось"),
+    55: ("🌧", "сильная морось"),
 
-    56: "слабая ледяная морось",
-    57: "сильная ледяная морось",
+    56: ("🌧", "слабая ледяная морось"),
+    57: ("🌧", "сильная ледяная морось"),
 
-    61: "слабый дождь",
-    63: "дождь",
-    65: "сильный дождь",
+    61: ("🌦", "слабый дождь"),
+    63: ("🌧", "дождь"),
+    65: ("🌧", "сильный дождь"),
 
-    66: "слабый ледяной дождь",
-    67: "сильный ледяной дождь",
+    66: ("🌧", "слабый ледяной дождь"),
+    67: ("🌧", "сильный ледяной дождь"),
 
-    71: "слабый снег",
-    73: "снег",
-    75: "сильный снег",
+    71: ("🌨", "слабый снег"),
+    73: ("❄️", "снег"),
+    75: ("❄️", "сильный снег"),
 
-    77: "снежные зёрна",
+    77: ("🌨", "снежные зёрна"),
 
-    80: "слабый ливень",
-    81: "ливень",
-    82: "сильный ливень",
+    80: ("🌦", "слабый ливень"),
+    81: ("🌧", "ливень"),
+    82: ("🌧", "сильный ливень"),
 
-    85: "слабый снегопад",
-    86: "сильный снегопад",
+    85: ("🌨", "слабый снегопад"),
+    86: ("❄️", "сильный снегопад"),
 
-    95: "гроза",
-    96: "гроза с градом",
-    99: "сильная гроза с градом",
+    95: ("⛈", "гроза"),
+    96: ("⛈", "гроза с градом"),
+    99: ("⛈", "сильная гроза с градом"),
 }
 
 
@@ -88,11 +88,8 @@ def get_forecast():
         ),
 
         "timezone": "Europe/Moscow",
-
-        # Берём несколько дней, а потом сами выбираем завтра.
         "forecast_days": 3,
 
-        # Явно задаём единицы.
         "temperature_unit": "celsius",
         "wind_speed_unit": "kmh",
         "precipitation_unit": "mm",
@@ -103,17 +100,11 @@ def get_forecast():
         + urlencode(params)
     )
 
-    print("========================================")
-    print("OPEN-METEO")
-    print("URL:")
-    print(url)
-    print("========================================")
+    print("Получаем прогноз Open-Meteo...")
 
     last_error = None
 
     for attempt in range(1, 4):
-
-        print(f"Попытка Open-Meteo: {attempt}/3")
 
         try:
 
@@ -126,66 +117,51 @@ def get_forecast():
 
             with urlopen(request, timeout=60) as response:
 
-                raw = response.read().decode("utf-8")
-
-                print(
-                    f"Open-Meteo HTTP: {response.status}"
+                data = json.loads(
+                    response.read().decode("utf-8")
                 )
 
-                data = json.loads(raw)
-
-                print("Open-Meteo: данные получены")
+                print("Прогноз получен.")
 
                 return data
 
         except HTTPError as error:
 
-            body = ""
-
-            try:
-                body = error.read().decode(
-                    "utf-8",
-                    errors="replace"
-                )
-            except Exception:
-                pass
-
-            print("!!! OPEN-METEO HTTP ERROR !!!")
-            print(f"URL: {url}")
-            print(f"HTTP: {error.code}")
-            print(f"Причина: {error.reason}")
-            print(f"Ответ сервера: {body}")
+            print(
+                f"Open-Meteo HTTP ошибка "
+                f"{error.code}, попытка {attempt}/3"
+            )
 
             last_error = error
 
         except URLError as error:
 
-            print("!!! OPEN-METEO URL ERROR !!!")
-            print(f"URL: {url}")
-            print(f"Ошибка: {error}")
+            print(
+                f"Ошибка соединения, "
+                f"попытка {attempt}/3: {error}"
+            )
 
             last_error = error
 
         except Exception as error:
 
-            print("!!! OPEN-METEO UNKNOWN ERROR !!!")
-            print(f"URL: {url}")
-            print(f"Ошибка: {repr(error)}")
+            print(
+                f"Неизвестная ошибка, "
+                f"попытка {attempt}/3: {error}"
+            )
 
             last_error = error
 
         if attempt < 3:
-            print("Ждём 5 секунд и пробуем ещё раз...")
             time.sleep(5)
 
     raise RuntimeError(
-        "Open-Meteo не ответил после 3 попыток: "
-        f"{last_error}"
+        f"Open-Meteo не ответил: {last_error}"
     )
 
 
 # ============================================================
-# ОТПРАВКА В TELEGRAM
+# TELEGRAM
 # ============================================================
 
 def send_telegram(message):
@@ -210,115 +186,44 @@ def send_telegram(message):
         method="POST",
     )
 
-    print("========================================")
-    print("TELEGRAM")
-    print("Отправляем прогноз...")
-    print("========================================")
+    print("Отправляем прогноз в Telegram...")
 
-    try:
+    with urlopen(request, timeout=60) as response:
 
-        with urlopen(request, timeout=60) as response:
-
-            raw = response.read().decode("utf-8")
-
-            print(
-                f"Telegram HTTP: {response.status}"
-            )
-
-            result = json.loads(raw)
-
-    except HTTPError as error:
-
-        body = ""
-
-        try:
-            body = error.read().decode(
-                "utf-8",
-                errors="replace"
-            )
-        except Exception:
-            pass
-
-        print("!!! TELEGRAM HTTP ERROR !!!")
-        print(f"HTTP: {error.code}")
-        print(f"Причина: {error.reason}")
-        print(f"Ответ Telegram: {body}")
-
-        raise
-
-    except Exception as error:
-
-        print("!!! TELEGRAM ERROR !!!")
-        print(repr(error))
-
-        raise
+        result = json.loads(
+            response.read().decode("utf-8")
+        )
 
     if not result.get("ok"):
 
         raise RuntimeError(
-            f"Telegram вернул ошибку: {result}"
+            f"Telegram error: {result}"
         )
 
-    print("Telegram: сообщение отправлено успешно")
+    print("Прогноз отправлен успешно.")
 
 
 # ============================================================
-# ФОРМИРОВАНИЕ ПРОГНОЗА
+# ОСНОВНАЯ ЛОГИКА
 # ============================================================
 
 def main():
 
-    print("========================================")
-    print("ОДИНЦОВО — ПОГОДА")
-    print("========================================")
-
     now = datetime.now(MOSCOW)
 
-    print(
-        "Текущее время Москва:",
-        now.strftime("%d.%m.%Y %H:%M:%S")
+    tomorrow = (
+        now.date()
+        + timedelta(days=1)
     )
 
-    tomorrow = now.date() + timedelta(days=1)
-
     print(
-        "Прогнозируемая дата:",
+        "Дата прогноза:",
         tomorrow.strftime("%d.%m.%Y")
     )
 
-    # --------------------------------------------------------
-    # Получаем данные
-    # --------------------------------------------------------
-
     data = get_forecast()
 
-    if "hourly" not in data:
-        raise RuntimeError(
-            "В ответе Open-Meteo нет блока hourly"
-        )
-
     hourly = data["hourly"]
-
-    required_fields = [
-        "time",
-        "temperature_2m",
-        "apparent_temperature",
-        "weather_code",
-        "precipitation_probability",
-        "precipitation",
-        "wind_speed_10m",
-    ]
-
-    for field in required_fields:
-
-        if field not in hourly:
-            raise RuntimeError(
-                f"В прогнозе отсутствует поле: {field}"
-            )
-
-    # --------------------------------------------------------
-    # Выбираем завтра 05:00–09:00
-    # --------------------------------------------------------
 
     rows = []
 
@@ -326,6 +231,7 @@ def main():
 
         dt = datetime.fromisoformat(timestamp)
 
+        # Только завтра 05:00–09:00
         if (
             dt.date() == tomorrow
             and 5 <= dt.hour <= 9
@@ -359,63 +265,34 @@ def main():
                 ][i],
             })
 
-    # --------------------------------------------------------
-    # Проверяем, нашли ли нужные часы
-    # --------------------------------------------------------
-
     if not rows:
 
-        print("!!! НЕ НАЙДЕН ПРОГНОЗ !!!")
-        print("Доступные первые даты:")
-
-        for timestamp in hourly["time"][:10]:
-            print(timestamp)
-
         raise RuntimeError(
-            "Не найден прогноз на завтра "
-            "05:00–09:00"
+            "Не найден прогноз на завтра 05:00–09:00"
         )
 
-    print(
-        f"Найдено часов прогноза: {len(rows)}"
+    # ========================================================
+    # ОБЩИЕ ПОКАЗАТЕЛИ
+    # ========================================================
+
+    min_temp = min(
+        row["temp"]
+        for row in rows
     )
 
-    # --------------------------------------------------------
-    # Формируем сообщение
-    # --------------------------------------------------------
+    max_temp = max(
+        row["temp"]
+        for row in rows
+    )
 
-    date_text = tomorrow.strftime("%d.%m.%Y")
+    min_feels = min(
+        row["feels"]
+        for row in rows
+    )
 
-    lines = [
-        f"🌦️ Погода в Одинцово на завтра, {date_text}",
-        "🏃 Утро 05:00–09:00",
-        "",
-    ]
-
-    for row in rows:
-
-        condition = WEATHER_CODES.get(
-            row["code"],
-            "неизвестные условия"
-        )
-
-        lines.append(
-            f"{row['hour']:02d}:00 — "
-            f"{row['temp']:+.0f}°C "
-            f"(ощущается {row['feels']:+.0f}°C), "
-            f"{condition}; "
-            f"осадки {row['rain_probability']}%, "
-            f"{row['precipitation']:.1f} мм, "
-            f"ветер {row['wind']:.0f} км/ч"
-        )
-
-    # --------------------------------------------------------
-    # Короткий вывод
-    # --------------------------------------------------------
-
-    avg_temp = (
-        sum(row["temp"] for row in rows)
-        / len(rows)
+    max_feels = max(
+        row["feels"]
+        for row in rows
     )
 
     max_rain = max(
@@ -428,66 +305,176 @@ def main():
         for row in rows
     )
 
+    max_wind = max(
+        row["wind"]
+        for row in rows
+    )
+
+    # ========================================================
+    # ИКОНКА ОБЩЕЙ ПОГОДЫ
+    # ========================================================
+
+    codes = [
+        row["code"]
+        for row in rows
+    ]
+
+    if any(code >= 95 for code in codes):
+
+        overall_icon = "⛈"
+
+    elif any(
+        61 <= code <= 67 or
+        80 <= code <= 82
+        for code in codes
+    ):
+
+        overall_icon = "🌧"
+
+    elif any(
+        71 <= code <= 77 or
+        85 <= code <= 86
+        for code in codes
+    ):
+
+        overall_icon = "❄️"
+
+    elif any(
+        45 <= code <= 48
+        for code in codes
+    ):
+
+        overall_icon = "🌫"
+
+    elif any(
+        1 <= code <= 3
+        for code in codes
+    ):
+
+        overall_icon = "⛅"
+
+    else:
+
+        overall_icon = "☀️"
+
+    # ========================================================
+    # ФИРМЕННЫЙ КОММЕНТАРИЙ ДЕДА-КРОССФИТЕРА
+    # ========================================================
+
     if max_rain >= 70:
 
         comment = (
-            "☔ Похоже, утром зонтик будет "
-            "не лишним."
+            "☔ Зонтик брать обязательно. "
+            "Бесплатный душ от природы."
         )
 
     elif max_rain >= 40:
 
         comment = (
-            "🌂 Зонтик лучше держать "
-            "в режиме боевой готовности."
+            "🌂 Зонтик лучше взять. "
+            "Небо что-то явно замышляет."
         )
 
-    elif avg_temp < 0:
+    elif max_wind >= 30:
 
         comment = (
-            "🥶 Утро намекает: разминка "
-            "перед выходом обязательна."
+            "💨 Ветер бодрый. "
+            "Можно бежать, а можно сразу "
+            "записать это как тренировку."
         )
 
-    elif avg_temp >= 15:
+    elif min_temp < 0:
 
         comment = (
-            "😎 Утро выглядит вполне "
-            "дружелюбно."
+            "🥶 Утро морозное. "
+            "Разминка начинается ещё дома."
+        )
+
+    elif max_temp >= 20:
+
+        comment = (
+            "😎 Утро тёплое. "
+            "Диван сегодня будет особенно убедителен."
+        )
+
+    elif max_rain == 0 and max_wind < 20:
+
+        comment = (
+            "🏃 Сухо, спокойно, без отмазок. "
+            "Беговая дорожка ждёт."
         )
 
     else:
 
         comment = (
-            "🏃 В целом утро выглядит "
-            "вполне беговым."
+            "🏃 В целом утро вполне беговое. "
+            "Отмазки не обнаружены."
+        )
+
+    # ========================================================
+    # ФОРМИРУЕМ КРАСИВОЕ СООБЩЕНИЕ
+    # ========================================================
+
+    date_text = tomorrow.strftime("%d.%m")
+
+    lines = [
+
+        f"{overall_icon} ОДИНЦОВО • {date_text}",
+
+        "🏃 Утро 05:00–09:00",
+
+        "",
+    ]
+
+    # Почасовой прогноз
+    for row in rows:
+
+        icon, _ = WEATHER_CODES.get(
+            row["code"],
+            ("🌡", "неизвестно")
+        )
+
+        lines.append(
+            f"{row['hour']:02d}:00  "
+            f"{row['temp']:+.0f}° "
+            f"(ощущ. {row['feels']:+.0f}°)  "
+            f"{icon}  "
+            f"{row['rain_probability']}%  "
+            f"💨 {row['wind']:.0f}"
         )
 
     lines.extend([
+
         "",
-        f"🌧️ Вероятность осадков: до {max_rain}%.",
-        f"💧 Осадки за период: около "
-        f"{total_precipitation:.1f} мм.",
+
+        "🌡 "
+        f"Температура: {min_temp:+.0f}…{max_temp:+.0f}°C",
+
+        "🥶 "
+        f"Ощущается: {min_feels:+.0f}…{max_feels:+.0f}°C",
+
+        "☔ "
+        f"Дождь: до {max_rain}%",
+
+        "💧 "
+        f"Осадки: {total_precipitation:.1f} мм",
+
+        "💨 "
+        f"Ветер: до {max_wind:.0f} км/ч",
+
+        "",
+
+        f"🥊 ДЕД-КРОССФИТЕР:",
         comment,
     ])
 
     message = "\n".join(lines)
 
     print("========================================")
-    print("ГОТОВОЕ СООБЩЕНИЕ:")
-    print("----------------------------------------")
     print(message)
     print("========================================")
 
-    # --------------------------------------------------------
-    # Отправляем
-    # --------------------------------------------------------
-
     send_telegram(message)
-
-    print("========================================")
-    print("ГОТОВО ✅")
-    print("========================================")
 
 
 # ============================================================
